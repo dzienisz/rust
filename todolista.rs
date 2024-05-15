@@ -49,43 +49,49 @@ impl TaskManager {
             println!("{}: {} [{}]", i, task.description, if task.completed { "x" } else { " " });
         }
     }
+
+    fn chatbot(&mut self, input: &str) {
+        if input.contains("add") {
+            let parts: Vec<&str> = input.splitn(2, "add ").collect();
+            if parts.len() > 1 {
+                self.add_task(parts[1].trim().to_string());
+                println!("Task added: {}", parts[1].trim());
+            } else {
+                println!("Please specify a task description.");
+            }
+        } else if input.contains("complete") {
+            let parts: Vec<&str> = input.splitn(2, "complete ").collect();
+            if parts.len() > 1 {
+                let index: usize = match parts[1].trim().parse() {
+                    Ok(num) => num,
+                    Err(_) => {
+                        println!("Invalid task index.");
+                        return;
+                    },
+                };
+                self.complete_task(index);
+                println!("Task completed: {}", index);
+            } else {
+                println!("Please specify a task index.");
+            }
+        } else if input.contains("list") {
+            self.list_tasks();
+        } else {
+            println!("I didn't understand that command.");
+        }
+    }
 }
 
 fn main() {
     let mut manager = TaskManager::new();
+    println!("Welcome to the Task Manager Chatbot!");
     loop {
-        println!("1. Add task");
-        println!("2. Complete task");
-        println!("3. List tasks");
-        println!("4. Exit");
-
-        let mut choice = String::new();
-        io::stdin().read_line(&mut choice).expect("Failed to read line");
-        let choice: u32 = match choice.trim().parse() {
-            Ok(num) => num,
-            Err(_) => continue,
-        };
-
-        match choice {
-            1 => {
-                let mut description = String::new();
-                println!("Enter task description:");
-                io::stdin().read_line(&mut description).expect("Failed to read line");
-                manager.add_task(description.trim().to_string());
-            }
-            2 => {
-                let mut index = String::new();
-                println!("Enter task index to complete:");
-                io::stdin().read_line(&mut index).expect("Failed to read line");
-                let index: usize = match index.trim().parse() {
-                    Ok(num) => num,
-                    Err(_) => continue,
-                };
-                manager.complete_task(index);
-            }
-            3 => manager.list_tasks(),
-            4 => break,
-            _ => continue,
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).expect("Failed to read line");
+        let input = input.trim();
+        if input == "exit" {
+            break;
         }
+        manager.chatbot(input);
     }
 }

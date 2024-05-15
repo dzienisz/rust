@@ -1,22 +1,33 @@
 use eframe::{egui, epi};
 use std::collections::VecDeque;
 
+#[derive(Debug, PartialEq)]
+enum TaskStatus {
+    Pending,
+    Completed,
+}
+
 #[derive(Debug)]
 struct Task {
     description: String,
-    completed: bool,
+    completed: TaskStatus,
 }
+
+type DisplayTasks = Vec<String>;
 
 impl Task {
     fn new(description: String) -> Task {
         Task {
             description,
-            completed: false,
+            completed: TaskStatus::Pending,
         }
     }
 
-    fn complete(&mut self) {
-        self.completed = true;
+    fn toggle_complete(&mut self) {
+        self.completed = match self.completed {
+            TaskStatus::Pending => TaskStatus::Completed,
+            TaskStatus::Completed => TaskStatus::Pending,
+        };
     }
 }
 
@@ -47,31 +58,34 @@ impl TaskManager {
         self.new_task.clear();
     }
 
-    fn complete_task(&mut self, index: usize) {
+    fn toggle_task_complete(&mut self, index: usize) -> Result<(), String> {
         if let Some(task) = self.tasks.get_mut(index) {
-            task.complete();
+            task.toggle_complete();
+            Ok(())
         } else {
-            eprintln!("Task not found.");
+            Err("Task not found.".to_string())
         }
     }
 
-    fn remove_task(&mut self, index: usize) {
+    fn remove_task(&mut self, index: usize) -> Result<(), String> {
         if index < self.tasks.len() {
             self.tasks.remove(index);
+            Ok(())
         } else {
-            eprintln!("Task not found.");
+            Err("Task not found.".to_string())
         }
     }
 
-    fn filtered_tasks(&self) -> Vec<String> {
-        self.tasks.iter()
+    fn display_tasks(&self) -> DisplayTasks {
+        self.tasks
+            .iter()
             .enumerate()
             .filter(|(_, task)| match self.filter {
                 TaskFilter::All => true,
-                TaskFilter::Completed => task.completed,
-                TaskFilter::Incomplete => !task.completed,
+                TaskFilter::Completed => task.completed == TaskStatus::Completed,
+                TaskFilter::Incomplete => task.completed == TaskStatus::Pending,
             })
-            .map(|(i, task)| format!("{}: {} [{}]", i, task.description, if task.completed { "x" } else { " " }))
+            .map(|(i, task)| format!("{}: {} [{}]", i, task.description, if task.completed == TaskStatus::Completed { "x" } else { " " }))
             .collect()
     }
 }
@@ -107,14 +121,18 @@ impl epi::App for TaskManager {
             ui.separator();
 
             ui.label("Tasks:");
-            for (i, task) in self.filtered_tasks().iter().enumerate() {
+            for (i, task) in self.display_tasks().iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.label(task);
-                    if ui.button("Complete").clicked() {
-                        self.complete_task(i);
+                    if ui.button("Toggle Complete").clicked() {
+                        if let Err(err) = self.toggle_task_complete(i) {
+                            eprintln!("{}", err); // Basic error handling
+                        }
                     }
                     if ui.button("Remove").clicked() {
-                        self.remove_task(i);
+                        if let Err(err) = self.remove_task(i) {
+                            eprintln!("{}", err); // Basic error handling
+                        }
                     }
                 });
             }

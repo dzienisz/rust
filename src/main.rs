@@ -1,4 +1,4 @@
-use eframe::{egui, epi};
+use eframe::egui;
 use std::collections::VecDeque;
 
 #[derive(Debug, PartialEq)]
@@ -35,8 +35,10 @@ struct TaskManager {
     tasks: VecDeque<Task>,
     new_task: String,
     filter: TaskFilter,
+    selected_task_index: Option<usize>,
 }
 
+#[derive(PartialEq)]
 enum TaskFilter {
     All,
     Completed,
@@ -49,13 +51,16 @@ impl TaskManager {
             tasks: VecDeque::new(),
             new_task: String::new(),
             filter: TaskFilter::All,
+            selected_task_index: None,
         }
     }
 
     fn add_task(&mut self) {
-        let task = Task::new(self.new_task.clone());
-        self.tasks.push_back(task);
-        self.new_task.clear();
+        if !self.new_task.is_empty() {
+            let task = Task::new(self.new_task.clone());
+            self.tasks.push_back(task);
+            self.new_task.clear();
+        }
     }
 
     fn toggle_task_complete(&mut self, index: usize) -> Result<(), String> {
@@ -85,63 +90,107 @@ impl TaskManager {
                 TaskFilter::Completed => task.completed == TaskStatus::Completed,
                 TaskFilter::Incomplete => task.completed == TaskStatus::Pending,
             })
-            .map(|(i, task)| format!("{}: {} [{}]", i, task.description, if task.completed == TaskStatus::Completed { "x" } else { " " }))
+            .map(|(i, task)| {
+                format!(
+                    "{}: {} [{}]",
+                    i,
+                    task.description,
+                    if task.completed == TaskStatus::Completed { "x" } else { " " }
+                )
+            })
             .collect()
     }
 }
 
-impl epi::App for TaskManager {
-    fn name(&self) -> &str {
-        "Task Manager"
+struct MyApp {
+    task_manager: TaskManager,
+}
+
+impl MyApp {
+    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        // This is where you would load saved tasks from storage if you had persistence
+        Self {
+            task_manager: TaskManager::new(),
+        }
     }
+}
 
-    fn update(&mut self, ctx: &egui::CtxRef, frame: &mut epi::Frame) {
+impl eframe::App for MyApp {
+    fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Task Manager");
-
+            // Header
             ui.horizontal(|ui| {
-                ui.text_edit_singleline(&mut self.new_task);
-                if ui.button("Add Task").clicked() {
-                    self.add_task();
-                }
+                ui.heading("Task Manager");
+
+                // Filter buttons
+                ui.selectable_value(&mut self.task_manager.filter, TaskFilter::All, "All");
+                ui.selectable_value(&mut self.task_manager.filter, TaskFilter::Completed, "Completed");
+                ui.selectable_value(&mut self.task_manager.filter, TaskFilter::Incomplete, "Incomplete");
+
+                // Search bar (combined with new task input)
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::BOTTOM), |ui| { 
+                    ui.add_space(10.0); // Spacing before input
+                    ui.text_edit_singleline(&mut self.task_manager.new_task)
+                }); 
             });
 
+            // Task Input Area
             ui.horizontal(|ui| {
-                if ui.button("Show All").clicked() {
-                    self.filter = TaskFilter::All;
-                }
-                if ui.button("Show Completed").clicked() {
-                    self.filter = TaskFilter::Completed;
-                }
-                if ui.button("Show Incomplete").clicked() {
-                    self.filter = TaskFilter::Incomplete;
+                if ui.button("Add Task").clicked() {
+                    self.task_manager.add_task();
                 }
             });
 
             ui.separator();
 
-            ui.label("Tasks:");
-            for (i, task) in self.display_tasks().iter().enumerate() {
-                ui.horizontal(|ui| {
-                    ui.label(task);
+            // Task List
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for (i, task) in self.task_manager.display_tasks().iter().enumerate() {
+                    let selected = self.task_manager.selected_task_index == Some(i);
+                    if ui.selectable_label(selected, task).clicked() {
+                        self.task_manager.selected_task_index = Some(i);
+                    }
+                }
+            });
+
+            // Task Details Panel
+            if let Some(index) = self.task_manager.selected_task_index {
+                ui.separator();
+                if let Some(task) = self.task_manager.tasks.get_mut(index) {
+                    ui.heading(&task.description);
+
+                    // Allow editing of task description
+                    ui.horizontal(|ui| {
+                        ui.label("Description:");
+                        ui.text_edit_singleline(&mut task.description);
+                    });
+
+                    // Button to toggle completion status
                     if ui.button("Toggle Complete").clicked() {
-                        if let Err(err) = self.toggle_task_complete(i) {
-                            eprintln!("{}", err); // Basic error handling
+                        if let Err(err) = self.task_manager.toggle_task_complete(index) {
+                            eprintln!("{}", err);
                         }
                     }
+
+                    // Remove button
                     if ui.button("Remove").clicked() {
-                        if let Err(err) = self.remove_task(i) {
-                            eprintln!("{}", err); // Basic error handling
+                        if let Err(err) = self.task_manager.remove_task(index) {
+                            eprintln!("{}", err);
                         }
+                        self.task_manager.selected_task_index = None; 
                     }
-                });
+                }
             }
         });
     }
 }
 
-fn main() {
-    let app = TaskManager::new();
+fn main() -> Result<(), eframe::Error> {
     let native_options = eframe::NativeOptions::default();
-    eframe::run_native(Box::new(app), native_options);
+
+    eframe::run_native(
+        "Task Manager",
+        native_options,
+        Box::new(|cc| Box::new(MyApp::new(cc))),
+    )
 }

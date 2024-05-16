@@ -1,8 +1,8 @@
 [package]
-name = "rust"
+name = "task_manager"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-eframe = "0.14"
-egui = "0.14"
+eframe = "0.21.3"
+egui = "0.21.0"
